@@ -123,6 +123,7 @@ def rerank_data(query, context, top_k=5):
         "retrieved_contexts_ratings": [context["retrieved_contexts_ratings"][i] for i in order]
     }
 
+
 @traceable(
         name="format_retrieved_conext",
         run_type="prompt"

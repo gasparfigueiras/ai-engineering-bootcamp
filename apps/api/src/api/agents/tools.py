@@ -2,22 +2,12 @@ import openai
 import cohere
 from qdrant_client import QdrantClient
 from langsmith import traceable, get_current_run_tree
-import instructor
-from pydantic import BaseModel, Field
-from qdrant_client.models import Filter, FieldCondition, MatchValue, Prefetch, Document
+from qdrant_client.models import Prefetch, Document
 from qdrant_client import models
+from langchain_core.tools import tool
 
-from api.agents.utils.prompt_management import prompt_template_config
 
-
-class RAGUsedContext(BaseModel):
-    id: str = Field("ID of the item used to answer the question")
-    description: str = Field(description="Description of the item used to answer the question")
-
-class RAGGenerationResponse(BaseModel):
-    answer: str = Field(description="Answer to the question")
-    references: list[RAGUsedContext] = Field(description="List of items used to answer the question")
-
+### Items metadata retrieval tool
 
 @traceable(
         name="embed_query",
@@ -138,120 +128,28 @@ def process_context(context):
     return formated_context
 
 
-@traceable(
-        name="build_prompt",
-        run_type="prompt"
-)
-def build_prompt(preprocessed_context, question):
+@tool
+def get_formatted_item_context(query: str, top_k: int = 5) -> str:
 
-    template = prompt_template_config("api/agents/prompts/retrieval_generation.yaml", "retrieval_generation")
+    """Get the top k context, each representing an inventory item for a given query.
     
-    prompt = template.render(
-        preprocessed_context=preprocessed_context,
-        question=question
-    )
+    Args:
+        query: The query to get the top k context for
+        top_k: The number of context chunks to retrieve, works best with 5 or more
     
-    return prompt
-
-
-@traceable(
-        name="generate_answer",
-        run_type="llm",
-        metadata={
-            "ls_provider": "openai",
-            "ls_model_name": "gpt-5.4-nano"
-        }
-)
-def generate_answer(prompt):
-
-    client = instructor.from_provider(
-    "openai/gpt-5.4-nano",
-    mode=instructor.Mode.RESPONSES_TOOLS
-    )
-
-    response, raw_response = client.create_with_completion(
-        messages=[
-            {"role": "system", "content": prompt},
-        ],
-        reasoning={"effort": "none"},
-        response_model=RAGGenerationResponse
-    )
-
-    current_run = get_current_run_tree()
-    if current_run:
-        current_run.metadata["usage_metadata"] = {
-            "input_tokens": raw_response.usage.input_tokens,
-            "output_tokens": raw_response.usage.output_tokens,
-            "total_tokens": raw_response.usage.total_tokens,
-        }
-
-    return response
-
-
-@traceable(
-        name="rag_pipeline"
-)
-def rag_pipeline(question, qdrant_client, top_k=5, hybrid=True, rerank=False, retrieve_k=20):
-
-    retrieved_context = retrieve_data(
-        question,
-        qdrant_client,
-        k=retrieve_k if rerank else top_k,
-        hybrid=hybrid
-    )
-
-    if rerank:
-        retrieved_context = rerank_data(question, retrieved_context, top_k=top_k)
-
-    preprocessed_context = process_context(retrieved_context)
-    prompt = build_prompt(preprocessed_context, question)
-    answer = generate_answer(prompt)
-
-    final_answer = {
-        "answer": answer.answer,
-        "references": answer.references,
-        "question": question,
-        "retrieved_context_ids": retrieved_context["retrieved_context_ids"],
-        "retrieved_context": retrieved_context["retrieved_contexts"]
-    }
-
-    return final_answer
-
-def rag_pipeline_wraper(question, top_k=5):
+    Returns:
+        A string of the top k context chunks with IDs and average ratings prepending each chunk, each representing an inventory item for a given query.
+    """
 
     qdrant_client = QdrantClient(url="http://qdrant:6333")
 
-    result = rag_pipeline(question, qdrant_client, top_k)
+    retrieved_context = retrieve_data(
+        query,
+        qdrant_client,
+        k=20
+    )
 
-    used_context = []
+    retrieved_context = rerank_data(query, retrieved_context, top_k=top_k)
+    formatted_context = process_context(retrieved_context)
 
-    for item in result.get("references", []):
-        payload = qdrant_client.scroll(
-        collection_name="Amazon-items-collection-01-hybrid-search",
-        with_payload=True,
-        with_vectors=False,
-        scroll_filter=Filter(
-            must=[
-                FieldCondition(
-                    key="parent_asin",
-                    match=MatchValue(value=item.id)
-                )
-            ]
-        )
-        )[0][0].payload
-        image_url = payload.get("image", "")
-        price = payload.get("price")
-
-        if image_url:
-            used_context.append(
-                {
-                    "image_url": image_url,
-                    "price": price,
-                    "description": item.description
-                }
-            )
-
-    return {
-        "answer": result["answer"],
-        "used_context": used_context
-    }
+    return formatted_context

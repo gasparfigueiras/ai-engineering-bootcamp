@@ -6,7 +6,7 @@ metadata:
 
 prompts:
 
-  retrieval-generation: |
+  retrieval_generation: |
 
     You are a shopping assistant that can answer questions about the products in stock.
 

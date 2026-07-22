@@ -98,6 +98,7 @@ def retrieve_data(query, qdrant_client, k=5, hybrid=True):
         "retrieved_contexts_ratings": retrieved_contexts_ratings
     }
 
+
 @traceable(
         name="rerank_data",
         run_type="tool"

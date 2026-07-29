@@ -3,7 +3,7 @@ import instructor
 from langsmith import traceable, get_current_run_tree
 from pydantic import BaseModel, Field
 
-from langchain_core.messages import SystemMessage, convert_to_openai_messages
+from langchain_core.messages import SystemMessage, convert_to_openai_messages, AIMessage
 from langchain_openai import ChatOpenAI
 
 from api.agents.utils.prompt_management import prompt_template_config
@@ -18,6 +18,9 @@ class RAGUsedContext(BaseModel):
     description: str = Field(description="Description of the item used to answer the question")
 
 class FinalResponse(BaseModel):
+
+    """Call this tool when the final answer is possible using available context."""
+
     answer: str = Field(description="Answer to the question")
     references: list[RAGUsedContext] = Field(description="List of items used to answer the question")
 
@@ -47,12 +50,12 @@ def agent_node(state) -> dict:
 
     llm = ChatOpenAI(
         model="gpt-5.4-mini",
-        reasoning_effort="none",
+        reasoning_effort="low",
         use_responses_api=True
     )
     llm_with_tools = llm.bind_tools(
         [get_formatted_item_context, FinalResponse],
-        tool_choice="any"
+        tool_choice="required"
     )
 
     response = llm_with_tools.invoke(
@@ -74,12 +77,22 @@ def agent_node(state) -> dict:
     answer = ""
     references = []
 
+    def sanitize_response(response):
+    
+        for tool_call in response.tool_calls:
+            if tool_call.get("name") == "FinalResponse":
+                answer = tool_call.get("args").get("answer")
+    
+        return AIMessage(content=answer)
+
     if len(response.tool_calls) > 0:
         for tool_call in response.tool_calls:
             if tool_call.get("name") == "FinalResponse":
                 final_answer = True
                 answer = tool_call.get("args").get("answer")
                 references.extend(tool_call.get("args").get("references"))
+
+                response = sanitize_response(response);
 
     return {
         "messages": [response],
@@ -110,8 +123,7 @@ def intent_router_node(state) -> dict:
 
     conversation = []
 
-    for message in messages:
-        conversation.append(convert_to_openai_messages(message))
+    conversation.append(convert_to_openai_messages(messages[-1]))
 
     client = instructor.from_provider(
         "openai/gpt-5.4-mini",

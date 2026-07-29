@@ -210,3 +210,4 @@ __marimo__/
 # Local data
 qdrant_data/
 data/
+postgres_data/

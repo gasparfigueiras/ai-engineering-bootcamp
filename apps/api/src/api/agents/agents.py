@@ -8,7 +8,7 @@ from langchain_openai import ChatOpenAI
 
 from api.agents.utils.prompt_management import prompt_template_config
 
-from api.agents.tools import get_formatted_item_context
+from api.agents.tools import get_formatted_item_context, get_formatted_reviews_context
 
 
 ### QnA Agent Response Model
@@ -54,7 +54,7 @@ def agent_node(state) -> dict:
         use_responses_api=True
     )
     llm_with_tools = llm.bind_tools(
-        [get_formatted_item_context, FinalResponse],
+        [get_formatted_item_context, get_formatted_reviews_context, FinalResponse],
         tool_choice="required"
     )
 

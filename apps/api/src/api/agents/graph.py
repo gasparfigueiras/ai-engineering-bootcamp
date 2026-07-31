@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Annotated, List, Any
 from operator import add
 from api.agents.agents import RAGUsedContext, agent_node, intent_router_node
-from api.agents.tools import get_formatted_item_context
+from api.agents.tools import get_formatted_item_context, get_formatted_reviews_context
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
@@ -45,7 +45,7 @@ def intent_router_conditional_edges(state: State) -> str:
 
 workflow = StateGraph(State)
 
-tools = [get_formatted_item_context]
+tools = [get_formatted_item_context, get_formatted_reviews_context]
 tool_node = ToolNode(tools)
 
 workflow.add_node("tool_node", tool_node)

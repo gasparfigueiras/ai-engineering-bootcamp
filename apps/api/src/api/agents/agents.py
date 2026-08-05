@@ -147,7 +147,12 @@ def intent_router_node(state) -> dict:
             "total_tokens": raw_response.usage.total_tokens,
         }
 
+        trace_id = str(current_run.trace_id)
+    else:
+        trace_id = ""
+
     return {
         "question_relevant": response.question_relevant,
-        "answer": response.answer
+        "answer": response.answer,
+        "trace_id": trace_id
     }

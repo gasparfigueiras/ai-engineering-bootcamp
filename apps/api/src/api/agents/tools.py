@@ -7,6 +7,14 @@ from qdrant_client import models
 from langchain_core.tools import tool
 
 
+@traceable(
+        name="embed_query",
+        run_type="embedding",
+        metadata={
+            "ls_provider":"openai",
+            "ls_model_name": "text_embedding-2-small"
+        }       
+)
 def get_embedding(text, model="text-embedding-3-small"):
     response = openai.embeddings.create(
         input=text,

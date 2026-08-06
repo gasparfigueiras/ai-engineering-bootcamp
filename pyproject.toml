@@ -21,6 +21,8 @@ dependencies = [
 members = [
     "apps/api",
     "apps/chatbot_ui",
+    "apps/items_mcp_server",
+    "apps/reviews_mcp_server",
 ]
 
 [dependency-groups]

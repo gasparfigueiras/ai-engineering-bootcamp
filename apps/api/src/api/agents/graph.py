@@ -9,6 +9,7 @@ from langgraph.prebuilt import ToolNode
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from langgraph.checkpoint.postgres import PostgresSaver
+import json
 
 
 class State(BaseModel):
@@ -82,8 +83,31 @@ graph = workflow.compile()
 ### Agent Execution
 
 
-def agent_wrapper(question: str, thread_id: str) -> dict:
-    
+def agent_stream_wrapper(question: str, thread_id: str) -> dict:
+
+    def _string_for_sse(string):
+        return f"data: {string}\n\n"
+
+    def _process_graph_event(chunk):
+
+        def _is_node_start(chunk):
+            return chunk[1].get("type") == "task"
+
+        def _tool_to_text(tool_call):
+            if tool_call.get("name") == "get_formatted_item_context":
+                return f"Looking for items: {tool_call.get('args').get('query', '')}."
+            elif tool_call.get("name") == "get_formatted_reviews_context":
+                return f"Fetching user reviews..."
+
+        if _is_node_start(chunk):
+            if chunk[1].get("payload", {}).get("name") == "intent_router_node":
+                return "Analyzing the question..."
+            if chunk[1].get("payload", {}).get("name") == "agent_node":
+                return "Planning..."
+            if chunk[1].get("payload", {}).get("name") == "tool_node":
+                message = " ".join([_tool_to_text(tool_call) for tool_call in chunk[1].get('payload', {}).get('input', {}).messages[-1].tool_calls])
+                return message
+
     qdrant_client = QdrantClient(url="http://qdrant:6333")
 
     initial_state = {
@@ -102,7 +126,19 @@ def agent_wrapper(question: str, thread_id: str) -> dict:
 
         graph = workflow.compile(checkpointer=checkpointer)
         
-        result = graph.invoke(initial_state, config)
+        for chunk in graph.stream(
+            initial_state,
+            config=config,
+            stream_mode=["debug", "values"]
+            ):
+
+                processed_chunk = _process_graph_event(chunk)
+
+                if processed_chunk:
+                    yield _string_for_sse(processed_chunk)
+
+                if chunk[0] == "values":
+                    result = chunk[1]
     
     used_context = []
     
@@ -131,8 +167,13 @@ def agent_wrapper(question: str, thread_id: str) -> dict:
                 }
             )
     
-    return {
-        "answer": result.get("answer", ""),
-        "used_context": used_context,
-        "trace_id": result.get("trace_id", "")
-    }
+    yield _string_for_sse(json.dumps(
+        {
+            "type": "final_answer",
+            "data": {
+                "answer": result.get("answer", ""),
+                "used_context": used_context,
+                "trace_id": result.get("trace_id", "")
+            }
+        }
+    ))

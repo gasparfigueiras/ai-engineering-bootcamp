@@ -95,7 +95,7 @@ def agent_node(state) -> dict:
 @traceable(
         name="route_intent",
         run_type="llm",
-        metada={
+        metadata={
             "ls_provider": "openai",
             "ls_model_name": "gpt-5.4-mini"
         }

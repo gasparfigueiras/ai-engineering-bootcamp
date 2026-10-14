@@ -11,6 +11,7 @@ dependencies = [
     "langsmith>=0.9.3",
     "nbconvert>=7.17.1",
     "openai>=2.41.0",
+    "psycopg[binary]>=3.3.4",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.1",
     "python-dotenv>=1.2.2",
